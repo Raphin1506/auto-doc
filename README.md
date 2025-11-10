@@ -1,5 +1,3 @@
-# AutoDoc - Gerador de Termos Automático
-
 # 🧾 AutoDoc - Gerador de Termos Automático
 
 O **AutoDoc** é uma aplicação em Python com interface moderna desenvolvida em **CustomTkinter** que automatiza a geração de documentos do Word (`.docx`).  
