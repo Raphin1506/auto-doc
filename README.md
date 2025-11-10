@@ -23,14 +23,15 @@ Com ele, é possível preencher um modelo de termo com dados como **nome, CPF, R
 
 O projeto utiliza as seguintes bibliotecas Python:
 
-customtkinter
-tkcalendar
-python-docx
-requests
+- customtkinter
+- tkcalendar
+- python-docx
+- requests
 
 
 Você pode instalar todas elas com:
-```bash
+
+bash
 pip install -r requirements.txt
 
 ---
