@@ -36,7 +36,7 @@ pip install -r requirements.txt
 
 ---
 
-## 👨‍💻 Desenvolvido por
+## 👨‍💻 Desenvolvido por:
 
 **Raphael Vinicius**  
 💻 Focado em automação e soluções inteligentes em **Python**.  
