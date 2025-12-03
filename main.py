@@ -8,52 +8,68 @@ import sys
 import requests
 import threading
 import unicodedata
+import json
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 
+SETTINGS_FILE = "config.json"
 
-# ---------- FUNÇÕES AUXILIARES ---------- #
+# ------------------ CONFIGURAÇÕES ------------------ #
+
+def salvar_config(caminho):
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"pasta_modelos": caminho}, f)
+
+def carregar_config():
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f).get("pasta_modelos", "")
+        except:
+            return ""
+    return ""
+
+# ------------------ AMBIENTE EXECUTÁVEL ------------------ #
 
 def resource_path(relative_path):
-    """
-    Função para acessar arquivos quando convertido em .exe
-    """
     try:
-        base_path = sys._MEIPASS  
+        base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
-
     return os.path.join(base_path, relative_path)
 
+# ------------------ UTILITÁRIOS ------------------ #
 
 def remover_acentos(texto: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFD", texto)
-        if unicodedata.category(c) != "Mn"
-    )
-
+    return "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
 
 def formatar_cpf(cpf):
     cpf = re.sub(r'\D', '', cpf)[:11]
-    return re.sub(r'(\d{3})(\d{3})(\d{3})(\d{0,2})', r'\1.\2.\3-\4', cpf)
-
+    if len(cpf) != 11:
+        return cpf  # retorna sem formatação se não tiver 11 dígitos
+    return re.sub(r'(\d{3})(\d{3})(\d{3})(\d{2})', r'\1.\2.\3-\4', cpf)
 
 def formatar_rg(rg):
     rg = re.sub(r'\D', '', rg)[:9]
-    return re.sub(r'(\d{2})(\d{3})(\d{3})(\d{0,1})', r'\1.\2.\3-\4', rg)
+    return re.sub(r'(\d{2})(\d{3})(\d{3})(\d?)', r'\1.\2.\3-\4', rg)
 
+# ------------------ FUNÇÃO DE UI ------------------ #
 
-# ---------- CEP (THREAD) ---------- #
+def run_on_ui(func):
+    app.after(0, func)
+
+# ------------------ BUSCA CEP ------------------ #
 
 def buscar_cep_thread(cep_raw):
     cep = re.sub(r'\D', '', cep_raw)
+
     if len(cep) != 8:
-        app.after(0, lambda: messagebox.showwarning("CEP inválido", "CEP deve ter 8 dígitos."))
-        app.after(0, lambda: set_cep_loading(False))
+        run_on_ui(lambda: messagebox.showwarning("CEP inválido", "CEP deve ter 8 dígitos."))
+        run_on_ui(lambda: set_cep_loading(False))
         return
 
-    app.after(0, lambda: set_cep_loading(True))
+    run_on_ui(lambda: set_cep_loading(True))
 
     try:
         resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/", timeout=6)
@@ -61,8 +77,8 @@ def buscar_cep_thread(cep_raw):
         data = resp.json()
 
         if data.get("erro"):
-            app.after(0, lambda: messagebox.showerror("CEP não encontrado", "CEP não foi encontrado."))
-            app.after(0, lambda: set_cep_loading(False))
+            run_on_ui(lambda: messagebox.showerror("Erro", "CEP não encontrado."))
+            run_on_ui(lambda: set_cep_loading(False))
             return
 
         def preencher():
@@ -78,24 +94,23 @@ def buscar_cep_thread(cep_raw):
             uf_entry.insert(0, data.get("uf", ""))
             set_cep_loading(False)
 
-        app.after(0, preencher)
+        run_on_ui(preencher)
 
     except Exception as e:
-        app.after(0, lambda: messagebox.showerror("Erro", f"Erro ao consultar CEP:\n{e}"))
-        app.after(0, lambda: set_cep_loading(False))
-
+        run_on_ui(lambda: messagebox.showerror("Erro", str(e)))
+        run_on_ui(lambda: set_cep_loading(False))
 
 def buscar_cep_event(event=None):
     threading.Thread(target=buscar_cep_thread, args=(cep_entry.get().strip(),), daemon=True).start()
 
-
 def set_cep_loading(loading: bool):
-    cep_btn.configure(text="⏳ Buscando..." if loading else "🔎 Buscar CEP",
-                      state="disabled" if loading else "normal")
+    cep_btn.configure(
+        text="⏳ Buscando..." if loading else "🔎 Buscar CEP",
+        state="disabled" if loading else "normal"
+    )
     cep_entry.configure(state="disabled" if loading else "normal")
 
-
-# ---------- SELEÇÃO DE DATA ---------- #
+# ------------------ SELEÇÃO DE DATA ------------------ #
 
 def selecionar_data():
     top = ctk.CTkToplevel(app)
@@ -105,28 +120,59 @@ def selecionar_data():
     cal = Calendar(top, selectmode="day", date_pattern="dd/mm/yyyy")
     cal.pack(pady=20, expand=True, fill="both")
 
-    ctk.CTkButton(top, text="Confirmar",
-                  command=lambda: (data_entry.delete(0, "end"),
-                                   data_entry.insert(0, cal.get_date()),
-                                   top.destroy())).pack(pady=10)
+    ctk.CTkButton(
+        top,
+        text="Confirmar",
+        command=lambda: (
+            data_entry.delete(0, "end"),
+            data_entry.insert(0, cal.get_date()),
+            top.destroy()
+        )
+    ).pack(pady=10)
 
+# ------------------ MODELOS ------------------ #
 
-# ---------- GERAR DOCUMENTO ---------- #
+def atualizar_modelos(pasta):
+    if not os.path.exists(pasta):
+        modelo_combo.configure(values=["Nenhum modelo encontrado"])
+        modelo_combo.set("Nenhum modelo encontrado")
+        return
+
+    modelos = [f for f in os.listdir(pasta) if f.endswith(".docx")]
+    if not modelos:
+        modelos = ["Nenhum modelo encontrado"]
+
+    modelo_combo.configure(values=modelos)
+    modelo_combo.set(modelos[0])  # seleciona o primeiro automaticamente
+
+def selecionar_pasta_modelos():
+    pasta = filedialog.askdirectory(title="Selecione a pasta dos modelos de termo")
+    if pasta:
+        salvar_config(pasta)
+        atualizar_modelos(pasta)
+        messagebox.showinfo("Sucesso", "Pasta definida com sucesso!")
+
+# ------------------ GERAR DOCUMENTO ------------------ #
 
 def gerar_documento():
-    modelo_nome = modelo_combo.get()
+    pasta_modelos = carregar_config()
 
-    if not modelo_nome or modelo_nome.startswith("Nenhum"):
-        messagebox.showwarning("Aviso", "Selecione um modelo de termo.")
+    if not pasta_modelos or not os.path.exists(pasta_modelos):
+        messagebox.showerror("Erro", "Nenhuma pasta de modelos configurada!")
+        return
+
+    modelo_nome = modelo_combo.get()
+    caminho_modelo = os.path.join(pasta_modelos, modelo_nome)
+
+    if not os.path.exists(caminho_modelo):
+        messagebox.showerror("Erro", "Modelo não encontrado!")
         return
 
     nome_pessoa = nome_entry.get().strip()
-    if not nome_pessoa:
-        messagebox.showwarning("Aviso", "Digite o nome completo.")
-        return
-    docs_path = resource_path("doc")
 
-    caminho_modelo = os.path.join(docs_path, modelo_nome)
+    if not nome_pessoa:
+        messagebox.showwarning("Erro", "Digite o nome completo.")
+        return
 
     try:
         doc = Document(caminho_modelo)
@@ -143,60 +189,72 @@ def gerar_documento():
             "{serie}": serie_entry.get(),
         }
 
+        # Substitui placeholders em parágrafos e tabelas
         for p in doc.paragraphs:
-            for ph, val in valores.items():
-                p.text = p.text.replace(ph, val)
+            p.text = replace_placeholders(p.text, valores)
 
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
-                    for ph, val in valores.items():
-                        cell.text = cell.text.replace(ph, val)
+                    cell.text = replace_placeholders(cell.text, valores)
 
         nome_formatado = remover_acentos(nome_pessoa).replace(" ", "_")
         nome_arquivo = f"Termo_{nome_formatado}.docx"
-        caminho_salvar = filedialog.asksaveasfilename(defaultextension=".docx",
-                                                      initialfile=nome_arquivo,
-                                                      filetypes=[("Word Document", "*.docx")])
+
+        caminho_salvar = filedialog.asksaveasfilename(
+            defaultextension=".docx",
+            initialfile=nome_arquivo,
+            filetypes=[("Documentos Word", "*.docx")]
+        )
 
         if caminho_salvar:
             doc.save(caminho_salvar)
-            messagebox.showinfo("Sucesso", "Documento gerado com sucesso!")
+            messagebox.showinfo("Sucesso", "Documento gerado!")
 
     except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao gerar documento:\n{e}")
+        messagebox.showerror("Erro", f"{e}")
 
+def replace_placeholders(text, valores):
+    for ph, val in valores.items():
+        text = text.replace(ph, val)
+    return text
 
-# ---------- INTERFACE ---------- #
+# ------------------ INTERFACE ------------------ #
 
 app = ctk.CTk()
 app.title("Gerador de Termo Automático - Raphael Vinicius")
-
+app.geometry("920x980")
 
 try:
     app.iconbitmap(resource_path("icon.ico"))
 except:
     pass
 
-app.geometry("920x980")
-app.minsize(860, 860)
-
-frame = ctk.CTkScrollableFrame(app, corner_radius=15)
+frame = ctk.CTkScrollableFrame(app)
 frame.pack(padx=20, pady=10, fill="both", expand=True)
 
-
 def criar_campo(nome, largura=600):
-    ctk.CTkLabel(frame, text=nome, font=("Arial", 15)).pack(pady=(10, 5))
+    ctk.CTkLabel(frame, text=nome, font=("Arial", 15)).pack(pady=5)
     entry = ctk.CTkEntry(frame, width=largura, height=40)
     entry.pack()
     return entry
 
-docs_path = resource_path("doc")
-modelos = [f for f in os.listdir(docs_path) if f.endswith(".docx")] if os.path.exists(docs_path) else ["Nenhum modelo encontrado"]
+ctk.CTkButton(frame, text="📂 Selecionar Pasta de Modelos", command=selecionar_pasta_modelos).pack(pady=10)
 
-ctk.CTkLabel(frame, text="Modelo de Termo", font=("Arial", 15)).pack(pady=(10, 5))
-modelo_combo = ctk.CTkOptionMenu(frame, values=modelos)
+pasta_salva = carregar_config()
+if pasta_salva and os.path.exists(pasta_salva):
+    modelos_iniciais = [f for f in os.listdir(pasta_salva) if f.endswith(".docx")]
+    if not modelos_iniciais:
+        modelos_iniciais = ["Nenhum modelo encontrado"]
+else:
+    modelos_iniciais = ["Nenhum modelo encontrado"]
+
+ctk.CTkLabel(frame, text="Modelo de Termo", font=("Arial", 15)).pack()
+modelo_combo = ctk.CTkOptionMenu(frame, values=modelos_iniciais)
 modelo_combo.pack(pady=10)
+
+if pasta_salva:
+    atualizar_modelos(pasta_salva)
 
 nome_entry = criar_campo("Nome completo")
 cpf_entry = criar_campo("CPF")
@@ -211,7 +269,7 @@ cep_btn = ctk.CTkButton(frame, text="🔎 Buscar CEP", command=buscar_cep_event)
 cep_btn.pack(pady=5)
 
 endereco_entry = criar_campo("Logradouro")
-complemento_entry = criar_campo("Complemento (opcional)")
+complemento_entry = criar_campo("Complemento")
 bairro_entry = criar_campo("Bairro")
 cidade_entry = criar_campo("Cidade")
 uf_entry = criar_campo("UF")
