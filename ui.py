@@ -4,7 +4,8 @@ import threading
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from tkcalendar import Calendar
-# Importando as classes
+
+# Importando as suas classes e serviços
 from services import CepService
 from word_engine import GeradorWord
 from utils import formatar_cpf, formatar_rg, remover_acentos
@@ -17,16 +18,27 @@ class AutoDocApp(ctk.CTk):
         super().__init__()
         
         # Configurações da Janela
-        self.title("Gerador de Termo Automático - AutoDoc V2")
-        self.geometry("920x980")
+        self.title("Gerador de Termo - AutoDoc V2.1 (Dinâmico)")
+        self.geometry("1100x800")
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")
         
+        # Carrega a pasta salva no config.json (Herança da sua V2!)
         self.pasta_modelos = self.carregar_config()
+        
+        # Instancia os motores
+        self.gerador_word = GeradorWord()
         self.servico_ia = ServicoIA()
-        self.build_ui()
+        
+        # Dicionário vivo para os campos gerados dinamicamente
+        self.campos_dinamicos = {}
 
-    # ------------------ CONFIGURAÇÕES ------------------
+        self.build_ui()
+        
+        # Tenta carregar a IA padrão ao iniciar
+        self.servico_ia.carregar_modelo("modelo_autodoc")
+
+    # ------------------ CONFIGURAÇÕES (Seu código legado salvo!) ------------------
     def carregar_config(self):
         if os.path.exists(SETTINGS_FILE):
             try:
@@ -42,190 +54,223 @@ class AutoDocApp(ctk.CTk):
         self.pasta_modelos = caminho
 
     # ------------------ CONSTRUÇÃO DA TELA ------------------
-    def criar_campo(self, frame, nome, largura=600):
-        ctk.CTkLabel(frame, text=nome, font=("Arial", 15)).pack(pady=5)
-        entry = ctk.CTkEntry(frame, width=largura, height=40)
-        entry.pack()
-        return entry
-
     def build_ui(self):
-        self.frame = ctk.CTkScrollableFrame(self)
-        self.frame.pack(padx=20, pady=10, fill="both", expand=True)
+        # --- FRAME ESQUERDO (Controles e IA) ---
+        self.frame_esq = ctk.CTkFrame(self, width=380)
+        self.frame_esq.pack(side="left", fill="y", padx=20, pady=20)
 
-        # --- ÁREA MÁGICA DA IA ---
-        ctk.CTkLabel(self.frame, text="🤖 Cole o texto do chamado aqui:", font=("Arial", 15, "bold"), text_color="#00ffcc").pack(pady=(10, 0))
-        self.texto_ia = ctk.CTkTextbox(self.frame, width=600, height=80)
-        self.texto_ia.pack(pady=5)
-        
-        ctk.CTkButton(self.frame, text="✨ Analisar com IA", command=self.analisar_chamado_ia, fg_color="#2b8a3e", hover_color="#237032").pack(pady=(0, 15))
-        
-        # Linha separadora
-        ctk.CTkFrame(self.frame, width=600, height=2, fg_color="gray").pack(pady=10)
-        # -------------------------
+        ctk.CTkLabel(self.frame_esq, text="⚙️ Painel de Controle", font=("Arial", 20, "bold")).pack(pady=10)
 
-        ctk.CTkButton(self.frame, text="📂 Selecionar Pasta de Modelos", command=self.selecionar_pasta_modelos).pack(pady=10)
+        # 1. Pasta de Modelos
+        ctk.CTkButton(self.frame_esq, text="📂 Selecionar Pasta de Modelos", command=self.selecionar_pasta_modelos, fg_color="gray").pack(fill="x", padx=10, pady=(10, 20))
 
-        ctk.CTkLabel(self.frame, text="Modelo de Termo", font=("Arial", 15)).pack()
-        self.modelo_combo = ctk.CTkOptionMenu(self.frame, values=["Nenhum modelo encontrado"])
-        self.modelo_combo.pack(pady=10)
+        # 2. Seletor de Cérebro (IA Multi-Domínio)
+        ctk.CTkLabel(self.frame_esq, text="1. Escolha a I.A. (Departamento):").pack(anchor="w", padx=10)
+        self.combo_ia = ctk.CTkOptionMenu(
+            self.frame_esq, 
+            values=["modelo_autodoc", "modelo_rh", "modelo_juridico"], 
+            command=self.trocar_cerebro_ia
+        )
+        self.combo_ia.pack(fill="x", padx=10, pady=5)
+
+        # 3. Seletor de Modelo (Word)
+        ctk.CTkLabel(self.frame_esq, text="2. Escolha o Modelo Word:").pack(anchor="w", padx=10, pady=(10, 0))
+        self.combo_modelos = ctk.CTkOptionMenu(
+            self.frame_esq, 
+            values=["Nenhum modelo encontrado"],
+            command=self.desenhar_campos_dinamicos
+        )
+        self.combo_modelos.pack(fill="x", padx=10, pady=5)
+
+        # 4. O Campo Mágico
+        ctk.CTkLabel(self.frame_esq, text="3. Campo Mágico (Cole o chamado):", text_color="#00ffcc", font=("Arial", 13, "bold")).pack(anchor="w", padx=10, pady=(20, 0))
+        self.texto_magico = ctk.CTkTextbox(self.frame_esq, height=120)
+        self.texto_magico.pack(fill="x", padx=10, pady=5)
+
+        self.btn_analisar = ctk.CTkButton(self.frame_esq, text="✨ Analisar com IA", fg_color="#2b8a3e", hover_color="#237032", command=self.analisar_com_ia)
+        self.btn_analisar.pack(fill="x", padx=10, pady=10)
+
+        self.btn_gerar = ctk.CTkButton(self.frame_esq, text="📄 Gerar Documento", fg_color="#275dad", hover_color="#1c4585", height=45, command=self.gerar_documento)
+        self.btn_gerar.pack(fill="x", padx=10, side="bottom", pady=20)
+
+        # --- FRAME DIREITO (O Formulário Dinâmico) ---
+        self.frame_dir = ctk.CTkScrollableFrame(self)
+        self.frame_dir.pack(side="right", fill="both", expand=True, padx=20, pady=20)
         
+        ctk.CTkLabel(self.frame_dir, text="📝 Formulário Dinâmico", font=("Arial", 20, "bold")).pack(pady=10)
+        
+        # Container vazio onde a mágica acontece
+        self.container_campos = ctk.CTkFrame(self.frame_dir, fg_color="transparent")
+        self.container_campos.pack(fill="both", expand=True)
+        
+        # --- BOTÃO SOBRE (No final do frame esquerdo) ---
+        self.btn_sobre = ctk.CTkButton(
+            self.frame_esq, 
+            text="ℹ️ Sobre o App", 
+            fg_color="transparent", 
+            text_color="gray", 
+            hover_color="#333",
+            width=100,
+            command=self.exibir_sobre
+        )
+        self.btn_sobre.pack(side="bottom", pady=10) # Fica fixo lá embaixo no painel
+
+        # ========================================================
+        # O GATILHO FINAL: Só chama os modelos depois da tela existir!
+        # ========================================================
         if self.pasta_modelos:
             self.atualizar_modelos(self.pasta_modelos)
-
-        self.nome_entry = self.criar_campo(self.frame, "Nome completo")
-        self.cpf_entry = self.criar_campo(self.frame, "CPF")
-        self.rg_entry = self.criar_campo(self.frame, "RG")
-
-        # Sessão CEP
-        ctk.CTkLabel(self.frame, text="CEP").pack()
-        self.cep_entry = ctk.CTkEntry(self.frame, width=200)
-        self.cep_entry.pack()
-        self.cep_entry.bind("<Return>", self.buscar_cep_event)
-        
-        self.cep_btn = ctk.CTkButton(self.frame, text="🔎 Buscar CEP", command=self.buscar_cep_event)
-        self.cep_btn.pack(pady=5)
-
-        self.endereco_entry = self.criar_campo(self.frame, "Logradouro")
-        self.complemento_entry = self.criar_campo(self.frame, "Complemento")
-        self.bairro_entry = self.criar_campo(self.frame, "Bairro")
-        self.cidade_entry = self.criar_campo(self.frame, "Cidade")
-        self.uf_entry = self.criar_campo(self.frame, "UF")
-
-        self.data_entry = self.criar_campo(self.frame, "Data")
-        ctk.CTkButton(self.frame, text="📅 Escolher Data", command=self.selecionar_data).pack(pady=5)
-
-        self.serie_entry = self.criar_campo(self.frame, "Série")
-
-        ctk.CTkButton(self, text="📃 Gerar Documento", command=self.gerar_documento, width=260, height=50).pack(pady=15)
+                  
 
     # ------------------ LÓGICA DE INTERAÇÃO ------------------
     def atualizar_modelos(self, pasta):
         if not os.path.exists(pasta):
-            self.modelo_combo.configure(values=["Nenhum modelo encontrado"])
-            self.modelo_combo.set("Nenhum modelo encontrado")
             return
         modelos = [f for f in os.listdir(pasta) if f.endswith(".docx") and not f.startswith("~")]
-        if not modelos:
-            modelos = ["Nenhum modelo encontrado"]
-        self.modelo_combo.configure(values=modelos)
-        self.modelo_combo.set(modelos[0])
+        if modelos:
+            self.combo_modelos.configure(values=modelos)
+            self.combo_modelos.set(modelos[0])
+            self.desenhar_campos_dinamicos(modelos[0]) # Já desenha a tela pro primeiro modelo!
 
     def selecionar_pasta_modelos(self):
         pasta = filedialog.askdirectory(title="Selecione a pasta dos modelos")
         if pasta:
             self.salvar_config(pasta)
             self.atualizar_modelos(pasta)
-            messagebox.showinfo("Sucesso", "Pasta definida com sucesso!")
+            messagebox.showinfo("Sucesso", "Pasta atualizada! Modelos carregados.")
 
+    def trocar_cerebro_ia(self, escolha):
+        sucesso = self.servico_ia.carregar_modelo(escolha)
+        if not sucesso:
+            messagebox.showwarning("Aviso", f"A pasta '{escolha}' não existe ainda. Treine a IA primeiro!")
+
+    def desenhar_campos_dinamicos(self, nome_arquivo_word):
+        # 1. Limpa o container
+        for widget in self.container_campos.winfo_children():
+            widget.destroy()
+        self.campos_dinamicos.clear()
+        
+        if not self.pasta_modelos: return
+        
+        caminho_completo = os.path.join(self.pasta_modelos, nome_arquivo_word)
+        try:
+            tags = self.gerador_word.mapear_variaveis(caminho_completo)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível ler o modelo: {e}")
+            return
+
+        # 2. Desenha os campos baseados no Word
+        for tag in tags:
+            label_texto = tag.replace("_", " ").title()
+            ctk.CTkLabel(self.container_campos, text=f"{label_texto}:", font=("Arial", 14, "bold")).pack(anchor="w", pady=(15, 0), padx=10)
+            
+            entrada = ctk.CTkEntry(self.container_campos, width=450, height=35)
+            entrada.pack(anchor="w", pady=(0, 5), padx=10)
+            
+            self.campos_dinamicos[tag] = entrada
+
+            # --- GATILHOS INTELIGENTES ---
+            # Se for CEP, liga a API
+            if tag.lower() == "cep":
+                entrada.bind("<Return>", self.buscar_cep_event)
+                ctk.CTkLabel(self.container_campos, text="↳ Pressione ENTER para buscar endereço", font=("Arial", 11, "italic"), text_color="#a8a8a8").pack(anchor="w", padx=10)
+            
+            # Se for DATA, avisa que o formato é manual por enquanto (poderíamos plugar o calendário aqui depois)
+            if "data" in tag.lower():
+                ctk.CTkLabel(self.container_campos, text="↳ Digite no formato DD/MM/AAAA", font=("Arial", 11, "italic"), text_color="#a8a8a8").pack(anchor="w", padx=10)
+
+    # ------------------ API DE CEP DINÂMICA ------------------
     def buscar_cep_event(self, event=None):
-        cep_raw = self.cep_entry.get().strip()
-        self.cep_btn.configure(text="⏳ Buscando...", state="disabled")
-        threading.Thread(target=self.buscar_cep_thread, args=(cep_raw,), daemon=True).start()
+        if "cep" in self.campos_dinamicos:
+            cep_raw = self.campos_dinamicos["cep"].get().strip()
+            if cep_raw:
+                threading.Thread(target=self.buscar_cep_thread, args=(cep_raw,), daemon=True).start()
 
     def buscar_cep_thread(self, cep_raw):
         try:
-            # Chama o nosso arquivo services.py (que não sabe nada de tela)
             dados_cep = CepService.buscar_cep(cep_raw)
-            # Usa o after para devolver os dados pra tela com segurança
             self.after(0, lambda: self.preencher_cep(dados_cep))
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror("Erro", str(e)))
-        finally:
-            self.after(0, lambda: self.cep_btn.configure(text="🔎 Buscar CEP", state="normal"))
+            self.after(0, lambda: messagebox.showerror("Erro CEP", str(e)))
 
     def preencher_cep(self, dados):
-        self.endereco_entry.delete(0, "end")
-        self.endereco_entry.insert(0, dados["logradouro"])
-        self.bairro_entry.delete(0, "end")
-        self.bairro_entry.insert(0, dados["bairro"])
-        self.cidade_entry.delete(0, "end")
-        self.cidade_entry.insert(0, dados["cidade"])
-        self.uf_entry.delete(0, "end")
-        self.uf_entry.insert(0, dados["uf"])
+        mapa_campos = {
+            "endereco": dados["logradouro"],
+            "logradouro": dados["logradouro"],
+            "bairro": dados["bairro"],
+            "cidade": dados["cidade"],
+            "uf": dados["uf"]
+        }
+        for tag_word, valor_api in mapa_campos.items():
+            if tag_word in self.campos_dinamicos:
+                widget = self.campos_dinamicos[tag_word]
+                widget.delete(0, "end")
+                widget.insert(0, valor_api)
 
-    def selecionar_data(self):
-        top = ctk.CTkToplevel(self)
-        top.title("Selecionar Data")
-        top.geometry("320x320")
-        cal = Calendar(top, selectmode="day", date_pattern="dd/mm/yyyy")
-        cal.pack(pady=20, expand=True, fill="both")
-        
-        def confirmar():
-            self.data_entry.delete(0, "end")
-            self.data_entry.insert(0, cal.get_date())
-            top.destroy()
-            
-        ctk.CTkButton(top, text="Confirmar", command=confirmar).pack(pady=10)
-    # ------------------ ANÁLISE DE CHAMADO DA IA ------------------  
-    
-    def analisar_chamado_ia(self):
-        texto_baguncado = self.texto_ia.get("1.0", "end-1c").strip()
-        
-        if not texto_baguncado:
-            messagebox.showwarning("Aviso", "Cole algum texto para a IA analisar.")
+    # ------------------ ANÁLISE IA ------------------
+    def analisar_com_ia(self):
+        texto = self.texto_magico.get("1.0", "end").strip()
+        if not texto:
+            messagebox.showwarning("Aviso", "Cole o chamado primeiro!")
             return
-            
-        # Chama o serviço híbrido (spaCy + RegEx)
-        dados_ia = self.servico_ia.analisar_texto(texto_baguncado)
-        
-        # Preenche os campos automaticamente se a IA achou alguma coisa
-        def preencher_campo(entry, valor):
-            if valor:
-                entry.delete(0, "end")
-                entry.insert(0, valor)
 
-        preencher_campo(self.nome_entry, dados_ia["nome"])
-        preencher_campo(self.cpf_entry, dados_ia["cpf"])
-        preencher_campo(self.rg_entry, dados_ia["rg"])
-        preencher_campo(self.cep_entry, dados_ia["cep"])
-        preencher_campo(self.data_entry, dados_ia["data"])
-        preencher_campo(self.serie_entry, dados_ia["serie"])
+        dados_extraidos = self.servico_ia.analisar_texto(texto)
+
+        for tag, widget_entrada in self.campos_dinamicos.items():
+            # A IA procura por 'cpf', 'nome', 'rg', etc.
+            if tag.lower() in dados_extraidos and dados_extraidos[tag.lower()]:
+                widget_entrada.delete(0, "end")
+                widget_entrada.insert(0, dados_extraidos[tag.lower()])
         
-        # Se achou CEP, já manda buscar o endereço automaticamente!
-        if dados_ia["cep"]:
+        # Dispara o CEP automaticamente se a IA achou um
+        if dados_extraidos.get("cep") and "cep" in self.campos_dinamicos:
             self.buscar_cep_event()
             
-        messagebox.showinfo("IA Concluída", "Campos preenchidos com o que foi encontrado!")
-    
-    # ------------------ O CORAÇÃO: GERAR DOCUMENTO ------------------
+        messagebox.showinfo("Sucesso", "IA preencheu o que encontrou!")
+
+    # ------------------ GERAR DOCUMENTO ------------------
     def gerar_documento(self):
-        if not self.pasta_modelos or not os.path.exists(self.pasta_modelos):
-            messagebox.showerror("Erro", "Nenhuma pasta de modelos configurada!")
+        modelo_nome = self.combo_modelos.get()
+        if not modelo_nome or modelo_nome == "Nenhum modelo encontrado":
+            messagebox.showerror("Erro", "Selecione um modelo válido.")
             return
 
-        modelo_nome = self.modelo_combo.get()
+        dados_finais = {}
+        for tag, widget_entrada in self.campos_dinamicos.items():
+            valor = widget_entrada.get().strip()
+            # Aplica formatações mágicas na saída se necessário
+            if tag.lower() == "cpf": valor = formatar_cpf(valor)
+            if tag.lower() == "rg": valor = formatar_rg(valor)
+            
+            dados_finais[tag] = valor
+
         caminho_modelo = os.path.join(self.pasta_modelos, modelo_nome)
-        nome_pessoa = self.nome_entry.get().strip()
-
-        if not nome_pessoa:
-            messagebox.showwarning("Aviso", "Digite o nome completo.")
-            return
-
-        # Empacota tudo bonitinho usando nossas funções do utils.py
-        dados = {
-            "nome": nome_pessoa,
-            "cpf": formatar_cpf(self.cpf_entry.get()),
-            "rg": formatar_rg(self.rg_entry.get()),
-            "endereco": self.endereco_entry.get(),
-            "complemento": self.complemento_entry.get(),
-            "bairro": self.bairro_entry.get(),
-            "cidade": self.cidade_entry.get(),
-            "uf": self.uf_entry.get(),
-            "data": self.data_entry.get(),
-            "serie": self.serie_entry.get(),
-        }
-
-        nome_formatado = remover_acentos(nome_pessoa).replace(" ", "_")
+        
+        nome_sugerido = dados_finais.get("nome", "Documento_Gerado")
+        nome_formatado = remover_acentos(nome_sugerido).replace(" ", "_")
+        
         caminho_salvar = filedialog.asksaveasfilename(
             defaultextension=".docx",
             initialfile=f"Termo_{nome_formatado}.docx",
-            filetypes=[("Documentos Word", "*.docx")]
+            filetypes=[("Word", "*.docx")]
         )
 
         if caminho_salvar:
             try:
-                # Passa a bola pro word_engine.py resolver
-                GeradorWord.criar_termo(caminho_modelo, caminho_salvar, dados)
-                messagebox.showinfo("Sucesso", "Documento gerado com sucesso!")
+                # Aqui o word_engine faz o trabalho dele
+                GeradorWord.criar_termo(caminho_modelo, caminho_salvar, dados_finais)
+                messagebox.showinfo("Sucesso", "Documento salvo com perfeição!")
             except Exception as e:
                 messagebox.showerror("Erro Crítico", str(e))
+                
+    def exibir_sobre(self):
+        msg = (
+            "🚀 AutoDoc V2.1 (Dinâmico)\n"
+            "----------------------------------------\n"
+            "Desenvolvido por: Raphael Vinícius Amaral de Andrade\n\n"
+            "Este aplicativo utiliza Inteligência Artificial e varredura \n"
+            "dinâmica via Regex para automatizar a criação de termos \n"
+            "e documentos Word com precisão cirúrgica.\n\n"
+            "Versão: 2.1 (Edição 'O Retorno do Regex')"
+        )
+        messagebox.showinfo("Sobre o App", msg)

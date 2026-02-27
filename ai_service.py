@@ -4,11 +4,20 @@ import os
 
 class ServicoIA:
     def __init__(self):
-        # Tenta carregar o seu modelo treinado. Se não achar, avisa.
-        if os.path.exists("modelo_autodoc"):
-            self.nlp = spacy.load("modelo_autodoc")
+        self.nlp = None # Agora a IA nasce "dormindo"
+        self.modelo_atual = ""
+
+    def carregar_modelo(self, nome_pasta_modelo: str):
+        """Troca o cérebro da IA em tempo real baseado no departamento"""
+        if os.path.exists(nome_pasta_modelo):
+            self.nlp = spacy.load(nome_pasta_modelo)
+            self.modelo_atual = nome_pasta_modelo
+            print(f"🧠 Cérebro '{nome_pasta_modelo}' carregado com sucesso!")
+            return True
         else:
             self.nlp = None
+            print(f"⚠️ Modelo '{nome_pasta_modelo}' não encontrado. A IA não vai funcionar.")
+            return False
 
     def analisar_texto(self, texto: str) -> dict:
         """
