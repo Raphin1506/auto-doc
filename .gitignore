@@ -1,0 +1,16 @@
+# Ambientes Virtuais
+venv/
+env/
+.env
+
+# Arquivos temporários do Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+
+# Ignorar arquivos Word temporários (aqueles que começam com ~$)
+~$*.docx

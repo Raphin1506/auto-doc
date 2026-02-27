@@ -32,6 +32,9 @@ Você pode instalar todas elas com:
 bash
 pip install -r requirements.txt
 
+OBS: Após rodar o projeto os requirements, rode o comando abaixo para baixar o idioma em pt-br
+python -m spacy download pt_core_news_sm
+
 ---
 
 ## 👨‍💻 Desenvolvido por:
