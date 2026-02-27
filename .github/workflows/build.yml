@@ -28,16 +28,19 @@ jobs:
 
     - name: Build EXE
       run: |
-        # Usamos o comando python para descobrir onde as bibliotecas foram instaladas no GitHub
-        $python_path = python -c "import site; print(site.getsitepackages()[0])"
-        $ctk_path = "$python_path\customtkinter"
-        $tkcal_path = "$python_path\tkcalendar"
+        un: |
+        # Usamos o Python para nos dar o caminho EXATO de cada biblioteca
+        $ctk_path = python -c "import customtkinter, os; print(os.path.dirname(customtkinter.__file__))"
+        $tkcal_path = python -c "import tkcalendar, os; print(os.path.dirname(tkcalendar.__file__))"
+
+        echo "Caminho CTK: $ctk_path"
+        echo "Caminho TKCAL: $tkcal_path"
 
         pyinstaller --noconfirm --windowed --onefile `
           --add-data "doc;doc" `
           --add-data "icon.ico;." `
-          --add-data "$ctk_path;customtkinter/" `
-          --add-data "$tkcal_path;tkcalendar/" `
+          --add-data "${ctk_path};customtkinter/" `
+          --add-data "${tkcal_path};tkcalendar/" `
           --icon=icon.ico `
           --name "AutoDoc_V2.1" `
           main.py
