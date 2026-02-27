@@ -21,21 +21,24 @@ jobs:
     - name: Install requirements
       run: |
         python -m pip install --upgrade pip
-        pip install customtkinter docxtpl python-docx tkcalendar pyinstaller
+        # A lista completa de passageiros:
+        pip install customtkinter docxtpl python-docx tkcalendar requests spacy pyinstaller
+        # Baixando o "motor" do SpaCy (ajuste se usar outro modelo)
+        python -m spacy download pt_core_news_sm
 
     - name: Build EXE
       shell: pwsh
       run: |
-        # 1. Descobrimos os caminhos das bibliotecas dinamicamente
-        $CTK_PATH = python -c "import customtkinter, os; print(os.path.dirname(customtkinter.__file__))"
-        $TKCAL_PATH = python -c "import tkcalendar, os; print(os.path.dirname(tkcalendar.__file__))"
-
-        # 2. Rodamos o PyInstaller com os caminhos injetados
+        $CTK = python -c "import customtkinter, os; print(os.path.dirname(customtkinter.__file__))"
+        $TKC = python -c "import tkcalendar, os; print(os.path.dirname(tkcalendar.__file__))"
+        
+        # O segredo aqui é o --collect-all spacy para levar os modelos junto
         pyinstaller --noconfirm --windowed --onefile `
+          --collect-all spacy `
           --add-data "doc;doc" `
           --add-data "icon.ico;." `
-          --add-data "$($CTK_PATH);customtkinter/" `
-          --add-data "$($TKCAL_PATH);tkcalendar/" `
+          --add-data "$($CTK);customtkinter/" `
+          --add-data "$($TKC);tkcalendar/" `
           --icon=icon.ico `
           --name "AutoDoc_V2.1" `
           main.py
