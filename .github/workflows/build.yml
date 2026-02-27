@@ -21,26 +21,21 @@ jobs:
     - name: Install requirements
       run: |
         python -m pip install --upgrade pip
-        # Garante que as bibliotecas críticas estão instaladas
         pip install customtkinter docxtpl python-docx tkcalendar pyinstaller
-        # Se tiveres um requirements.txt, descomenta a linha abaixo:
-        # pip install -r requirements.txt
 
     - name: Build EXE
+      shell: pwsh
       run: |
-        un: |
-        # Usamos o Python para nos dar o caminho EXATO de cada biblioteca
-        $ctk_path = python -c "import customtkinter, os; print(os.path.dirname(customtkinter.__file__))"
-        $tkcal_path = python -c "import tkcalendar, os; print(os.path.dirname(tkcalendar.__file__))"
+        # 1. Descobrimos os caminhos das bibliotecas dinamicamente
+        $CTK_PATH = python -c "import customtkinter, os; print(os.path.dirname(customtkinter.__file__))"
+        $TKCAL_PATH = python -c "import tkcalendar, os; print(os.path.dirname(tkcalendar.__file__))"
 
-        echo "Caminho CTK: $ctk_path"
-        echo "Caminho TKCAL: $tkcal_path"
-
+        # 2. Rodamos o PyInstaller com os caminhos injetados
         pyinstaller --noconfirm --windowed --onefile `
           --add-data "doc;doc" `
           --add-data "icon.ico;." `
-          --add-data "${ctk_path};customtkinter/" `
-          --add-data "${tkcal_path};tkcalendar/" `
+          --add-data "$($CTK_PATH);customtkinter/" `
+          --add-data "$($TKCAL_PATH);tkcalendar/" `
           --icon=icon.ico `
           --name "AutoDoc_V2.1" `
           main.py
