@@ -4,7 +4,7 @@ import threading
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from tkcalendar import Calendar
-# Importando as nossas "caixas de ferramentas" isoladas
+# Importando as classes
 from services import CepService
 from word_engine import GeradorWord
 from utils import formatar_cpf, formatar_rg, remover_acentos

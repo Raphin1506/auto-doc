@@ -12,5 +12,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Ignorar arquivos Word temporários (aqueles que começam com ~$)
+# Ignorar arquivos Word temporários
 ~$*.docx
