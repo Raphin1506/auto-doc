@@ -18,7 +18,7 @@ class AutoDocApp(ctk.CTk):
         super().__init__()
         
         # Configurações da Janela
-        self.title("Gerador de Termo - AutoDoc V2.1 (Dinâmico)")
+        self.title("Gerador de Termo - AutoDoc V2.2 (Dinâmico)")
         self.geometry("1100x800")
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")
