@@ -300,6 +300,7 @@ class AutoDocApp(ctk.CTk):
             "Este aplicativo utiliza Inteligência Artificial e varredura \n"
             "dinâmica via Regex para automatizar a criação de termos \n"
             "e documentos Word com precisão cirúrgica.\n\n"
-            "Versão: 2.1 (Edição 'O Retorno do Regex')"
+            "Versão: 2.2\n\n"
+            "Log: - Adição de calendário"
         )
         messagebox.showinfo("Sobre o App", msg)
