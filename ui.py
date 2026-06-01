@@ -177,7 +177,45 @@ class AutoDocApp(ctk.CTk):
             
             # Se for DATA, avisa que o formato é manual por enquanto (poderíamos plugar o calendário aqui depois)
             if "data" in tag.lower():
-                ctk.CTkLabel(self.container_campos, text="↳ Digite no formato DD/MM/AAAA", font=("Arial", 11, "italic"), text_color="#a8a8a8").pack(anchor="w", padx=10)
+                ctk.CTkLabel(self.container_campos, text="↳ Digite no formato DD/MM/AAAA ou escolha a data pelo calendário", font=("Arial", 11, "italic"), text_color="#a8a8a8").pack(anchor="w", padx=10)
+                
+                # 2. Criar um Frame para deixar o Entry e o Botão lado a lado
+                frame_data = ctk.CTkEntry(self.container_campos, fg_color="transparent")
+                frame_data.pack(anchor="w", padx=(0, 10))
+                
+                # 3. Campo de entrada da data
+                entry_data = ctk.CTkEntry(frame_data, placeholder_text="DD/MM/AAAA", width=150)
+                entry_data.pack(side="left", padx=(0, 10))
+                
+                def abrir_calendario():
+                    # Cria uma janela secundária (pop-up)
+                    janela_calendario = ctk.CTkToplevel()
+                    janela_calendario.title("Escolha uma Data")
+                    janela_calendario.geometry("300x250")
+                    janela_calendario.grab_set()
+                    
+                    cal = Calendar(janela_calendario, selectmode='day', date_pattern='dd/mm/yyyy')
+                    cal.pack(padx=20, pady=15, fill="both", expand=True)
+
+                    # Função para capturar a data escolhida e colocar no Entry
+                    def confirmar_data():
+                        data_escolhida = cal.get_date()
+                        entry_data.delete(0, "end") # Limpa o que estiver no campo
+                        entry_data.insert(0, data_escolhida) # Insere a nova data
+                        janela_calendario.destroy() # Fecha o pop-up
+
+                    # Botão para confirmar a escolha dentro do pop-up
+                    btn_confirmar = ctk.CTkButton(janela_calendario, text="Confirmar Data", command=confirmar_data)
+                    btn_confirmar.pack(pady=(0, 15))
+
+                # 5. Botão que fica ao lado do campo de texto para abrir o calendário
+                btn_calendario = ctk.CTkButton(
+                    frame_data, 
+                    text="📅 Abrir Calendário", 
+                    width=120, 
+                    command=abrir_calendario
+                )
+                btn_calendario.pack(side="left")
 
     # ------------------ API DE CEP DINÂMICA ------------------
     def buscar_cep_event(self, event=None):
